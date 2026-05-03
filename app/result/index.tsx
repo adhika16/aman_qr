@@ -12,7 +12,6 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
-  Linking,
   SafeAreaView,
   Clipboard,
 } from 'react-native';
@@ -27,8 +26,6 @@ import {
   QR_TYPE_LABELS,
   URLContent,
   UPIPaymentContent,
-  EmailContent,
-  PhoneContent,
   RiskLevel,
 } from '../types/qr.types';
 
@@ -53,60 +50,6 @@ export default function ResultScreen() {
     Clipboard.setString(qrData.rawContent);
     Alert.alert('Copied', 'QR content copied to clipboard');
   };
-
-  const handleOpen = async () => {
-    if (qrData.type === QRType.URL) {
-      const content = qrData.parsedContent as URLContent;
-      try {
-        const supported = await Linking.canOpenURL(content.originalUrl);
-        if (supported) {
-          await Linking.openURL(content.originalUrl);
-        } else {
-          Alert.alert('Error', 'Cannot open this URL');
-        }
-      } catch (error) {
-        Alert.alert('Error', 'Failed to open URL');
-      }
-    } else if (qrData.type === QRType.EMAIL) {
-      const content = qrData.parsedContent as EmailContent;
-      const mailtoUrl = `mailto:${content.address}${content.subject ? `?subject=${encodeURIComponent(content.subject)}` : ''}`;
-      Linking.openURL(mailtoUrl);
-    } else if (qrData.type === QRType.PHONE) {
-      const content = qrData.parsedContent as PhoneContent;
-      Linking.openURL(`tel:${content.number}`);
-    }
-  };
-
-  const getActionButtonConfig = () => {
-    switch (qrData.type) {
-      case QRType.URL:
-        return {
-          icon: 'open-in-browser' as const,
-          label: 'Open URL',
-          disabled: (safetyAnalysis?.riskScore || 0) > 8,
-        };
-      case QRType.EMAIL:
-        return {
-          icon: 'email' as const,
-          label: 'Send Email',
-          disabled: false,
-        };
-      case QRType.PHONE:
-        return {
-          icon: 'phone' as const,
-          label: 'Call',
-          disabled: false,
-        };
-      default:
-        return {
-          icon: 'content-copy' as const,
-          label: 'Copy',
-          disabled: false,
-        };
-    }
-  };
-
-  const actionConfig = getActionButtonConfig();
 
   const renderContentPreview = () => {
     switch (qrData.type) {
@@ -145,23 +88,40 @@ export default function ResultScreen() {
       case QRType.UPI_PAYMENT: {
         const content = qrData.parsedContent as UPIPaymentContent;
         return (
-          <View style={styles.contentSection}>
-            <Text style={styles.contentLabel}>Payment Request</Text>
+          <View style={styles.paymentSection}>
+            <View style={styles.paymentHeader}>
+              <MaterialIcons name="account-balance-wallet" size={24} color="#D97706" />
+              <Text style={styles.paymentTitle}>Payment Details</Text>
+            </View>
+            
             <View style={styles.paymentDetails}>
               <View style={styles.paymentRow}>
-                <Text style={styles.paymentLabel}>Payee:</Text>
+                <Text style={styles.paymentLabel}>Payee Name</Text>
                 <Text style={styles.paymentValue}>
-                  {content.payeeName || content.payeeId}
+                  {content.payeeName || 'Not specified'}
+                </Text>
+              </View>
+              <View style={styles.paymentRow}>
+                <Text style={styles.paymentLabel}>UPI ID</Text>
+                <Text style={styles.paymentValue}>
+                  {content.payeeId}
                 </Text>
               </View>
               {content.amount && (
                 <View style={styles.paymentRow}>
-                  <Text style={styles.paymentLabel}>Amount:</Text>
-                  <Text style={styles.paymentValue}>
+                  <Text style={styles.paymentLabel}>Amount</Text>
+                  <Text style={[styles.paymentValue, styles.paymentAmount]}>
                     ₹{content.amount}
                   </Text>
                 </View>
               )}
+            </View>
+
+            <View style={styles.paymentWarning}>
+              <MaterialIcons name="warning-amber" size={20} color="#D97706" />
+              <Text style={styles.paymentWarningText}>
+                ⚠️ Always verify payee details before making payment
+              </Text>
             </View>
           </View>
         );
@@ -288,43 +248,24 @@ export default function ResultScreen() {
           </View>
         )}
 
-        {/* History Feature - Coming Soon */}
-        <View style={[styles.section, styles.comingSoonSection]}>
-          <View style={styles.comingSoonHeader}>
-            <MaterialIcons name="history" size={20} color="#9CA3AF" />
-            <Text style={styles.comingSoonTitle}>Scan History</Text>
-          </View>
-          <Text style={styles.comingSoonText}>
-            Coming soon... Save and review your scan history
-          </Text>
-        </View>
-
         <View style={styles.bottomSpacing} />
       </ScrollView>
 
-      {/* Bottom Action Buttons */}
+      {/* Bottom Action Buttons - Simplified: Copy | Scan Again | Close */}
       <View style={styles.bottomBar}>
         <TouchableOpacity style={styles.actionButton} onPress={handleCopy}>
           <MaterialIcons name="content-copy" size={24} color="#3B82F6" />
           <Text style={styles.actionButtonText}>Copy</Text>
         </TouchableOpacity>
 
-        {(qrData.type === QRType.URL || qrData.type === QRType.EMAIL || qrData.type === QRType.PHONE) && (
-          <TouchableOpacity
-            style={[styles.actionButton, styles.primaryButton, actionConfig.disabled && styles.disabledButton]}
-            onPress={handleOpen}
-            disabled={actionConfig.disabled}
-          >
-            <MaterialIcons name={actionConfig.icon} size={24} color={actionConfig.disabled ? '#9CA3AF' : 'white'} />
-            <Text style={[styles.primaryButtonText, actionConfig.disabled && styles.disabledButtonText]}>
-              {actionConfig.label}
-            </Text>
-          </TouchableOpacity>
-        )}
-
         <TouchableOpacity style={styles.actionButton} onPress={handleClose}>
           <MaterialIcons name="qr-code-scanner" size={24} color="#3B82F6" />
           <Text style={styles.actionButtonText}>Scan Again</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.actionButton} onPress={handleClose}>
+          <MaterialIcons name="close" size={24} color="#6B7280" />
+          <Text style={[styles.actionButtonText, { color: '#6B7280' }]}>Close</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -451,23 +392,69 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '500',
   },
+  // Payment Section Styles
+  paymentSection: {
+    margin: 16,
+    marginTop: 0,
+    padding: 16,
+    backgroundColor: '#FFFBEB',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#FCD34D',
+  },
+  paymentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 12,
+    gap: 8,
+  },
+  paymentTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#92400E',
+  },
   paymentDetails: {
-    marginTop: 8,
+    backgroundColor: 'white',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
   },
   paymentRow: {
     flexDirection: 'row',
-    marginBottom: 8,
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: '#FEF3C7',
   },
   paymentLabel: {
     fontSize: 14,
-    color: '#6B7280',
-    width: 80,
+    color: '#78716C',
+    fontWeight: '500',
   },
   paymentValue: {
     fontSize: 14,
     color: '#1F2937',
-    fontWeight: '500',
+    fontWeight: '600',
+  },
+  paymentAmount: {
+    fontSize: 18,
+    color: '#059669',
+  },
+  paymentWarning: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF3C7',
+    padding: 12,
+    borderRadius: 8,
+    gap: 8,
+  },
+  paymentWarningText: {
+    fontSize: 13,
+    color: '#92400E',
+    fontWeight: '600',
     flex: 1,
+    lineHeight: 18,
   },
   section: {
     margin: 16,
@@ -559,28 +546,6 @@ const styles = StyleSheet.create({
     color: '#6B7280',
     marginTop: 4,
   },
-  comingSoonSection: {
-    backgroundColor: '#F3F4F6',
-    borderStyle: 'dashed',
-    borderWidth: 1,
-    borderColor: '#D1D5DB',
-  },
-  comingSoonHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    marginBottom: 4,
-  },
-  comingSoonTitle: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#6B7280',
-  },
-  comingSoonText: {
-    fontSize: 13,
-    color: '#9CA3AF',
-    fontStyle: 'italic',
-  },
   bottomSpacing: {
     height: 100,
   },
@@ -606,24 +571,5 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#3B82F6',
     marginTop: 4,
-  },
-  primaryButton: {
-    backgroundColor: '#3B82F6',
-    borderRadius: 12,
-    paddingHorizontal: 24,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  primaryButtonText: {
-    fontSize: 14,
-    color: 'white',
-    fontWeight: '600',
-  },
-  disabledButton: {
-    backgroundColor: '#E5E7EB',
-  },
-  disabledButtonText: {
-    color: '#9CA3AF',
   },
 });
