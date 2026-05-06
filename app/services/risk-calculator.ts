@@ -5,31 +5,31 @@
 
 import { QRData, QRType, SafetyCheck, SafetyAnalysis, RiskLevel, URLContent } from '../types/qr.types';
 import { RISK_SCORING, RISK_THRESHOLDS, TRUSTED_DOMAINS, SUSPICIOUS_TLDS } from '../constants/config';
-import { analyzeWithAzureOpenAI } from './azure-openai';
-import { checkGoogleSafeBrowsing } from './safe-browsing';
-import { checkURLhaus } from './urlhaus';
+import { checkSecurityProxy } from './security-proxy';
+
+/**
+ * Security check result with offline status
+ */
+export interface SecurityCheckResult {
+  checks: SafetyCheck[];
+  isOffline: boolean;
+  cacheHit: boolean;
+}
 
 /**
  * Perform comprehensive safety analysis on QR data
- * Runs all checks in parallel for performance
+ * Runs all safety checks in parallel for performance
  */
 export async function analyzeQRSafety(qrData: QRData): Promise<SafetyAnalysis> {
   const startTime = Date.now();
 
-  // Run all safety checks in parallel
-  const [azureCheck, safeBrowsingCheck, urlhausCheck] = await Promise.all([
-    analyzeWithAzureOpenAI(qrData),
-    checkGoogleSafeBrowsing(qrData),
-    checkURLhaus(qrData),
-  ]);
-
-  const checks = [azureCheck, safeBrowsingCheck, urlhausCheck];
-
-  // Add local heuristic checks for URLs
-  if (qrData.type === QRType.URL) {
-    const localCheck = performLocalHeuristicCheck(qrData);
-    checks.push(localCheck);
-  }
+  // Perform local heuristic checks first (instant)
+  const localCheck = performEnhancedLocalHeuristicCheck(qrData);
+  
+  // Run external security checks via proxy
+  const proxyResult = await checkSecurityProxy(qrData);
+  
+  const checks = [localCheck, proxyResult.safeBrowsingCheck, proxyResult.urlhausCheck];
 
   // Calculate aggregated risk score
   const riskScore = calculateRiskScore(checks, qrData);
@@ -41,7 +41,7 @@ export async function analyzeQRSafety(qrData: QRData): Promise<SafetyAnalysis> {
   const explanations = generateExplanations(checks, riskScore, qrData);
 
   // Generate recommendations
-  const recommendations = generateRecommendations(riskLevel, checks, qrData);
+  const recommendations = generateRecommendations(riskLevel, checks, qrData, proxyResult.isOffline);
 
   // Collect all red flags
   const redFlags = checks.flatMap((check) => check.threatType ? [check.threatType] : []);
@@ -61,50 +61,220 @@ export async function analyzeQRSafety(qrData: QRData): Promise<SafetyAnalysis> {
 }
 
 /**
- * Perform local heuristic checks (fast, no API calls)
+ * Check if external security services are in offline mode
  */
-function performLocalHeuristicCheck(qrData: QRData): SafetyCheck {
-  const content = qrData.parsedContent as URLContent;
+export async function isSecurityOffline(qrData: QRData): Promise<boolean> {
+  if (qrData.type !== QRType.URL) {
+    return false;
+  }
+  
+  const result = await checkSecurityProxy(qrData);
+  return result.isOffline;
+}
+
+/**
+ * Perform enhanced local heuristic checks (fast, no API calls)
+ * Includes: HTTP check, URL shorteners, typosquatting, suspicious patterns, IP detection
+ */
+function performEnhancedLocalHeuristicCheck(qrData: QRData): SafetyCheck {
   const concerns: string[] = [];
   let isThreat = false;
+  let confidence = 0.7;
 
-  // Check for HTTP (not HTTPS)
-  if (!content.isHttps) {
-    concerns.push('Unencrypted HTTP connection');
-    isThreat = true;
-  }
+  // URL-specific checks
+  if (qrData.type === QRType.URL) {
+    const content = qrData.parsedContent as URLContent;
 
-  // Check for URL shorteners
-  if (content.isShortened) {
-    concerns.push('URL shortener obscures destination');
-    isThreat = true;
-  }
+    // Check for HTTP (not HTTPS)
+    if (!content.isHttps) {
+      concerns.push('Unencrypted HTTP connection');
+      isThreat = true;
+    }
 
-  // Check for well-known safe domains
-  const isTrustedDomain = TRUSTED_DOMAINS.some((domain) =>
-    content.domain === domain || content.domain.endsWith('.' + domain)
-  );
+    // Check for URL shorteners
+    if (content.isShortened) {
+      concerns.push('URL shortener obscures destination');
+      isThreat = true;
+    }
 
-  // Check for suspicious TLDs
-  const hasSuspiciousTLD = SUSPICIOUS_TLDS.some((tld) =>
-    content.domain.toLowerCase().endsWith(tld)
-  );
+    // Check for suspicious TLDs
+    const hasSuspiciousTLD = SUSPICIOUS_TLDS.some((tld) =>
+      content.domain.toLowerCase().endsWith(tld)
+    );
 
-  if (hasSuspiciousTLD) {
-    concerns.push('Suspicious top-level domain');
-    isThreat = true;
+    if (hasSuspiciousTLD) {
+      concerns.push('Suspicious top-level domain');
+      isThreat = true;
+    }
+
+    // Check for typosquatting
+    const typosquattingResult = detectTyposquatting(content.domain);
+    if (typosquattingResult) {
+      concerns.push('Potential typosquatting detected');
+      isThreat = true;
+      confidence = 0.85;
+    }
+
+    // Check for suspicious URL patterns
+    const suspiciousPatterns = checkSuspiciousPatterns(content.originalUrl);
+    concerns.push(...suspiciousPatterns);
+    if (suspiciousPatterns.length > 0) {
+      isThreat = true;
+    }
+
+    // Check for IP address
+    if (containsIPAddress(content.originalUrl)) {
+      concerns.push('Raw IP address instead of domain name');
+      isThreat = true;
+    }
+
+    // Check for encoding abuse
+    const encodingIssues = detectEncodingAbuse(content.originalUrl);
+    if (encodingIssues.length > 0) {
+      concerns.push(...encodingIssues);
+      isThreat = true;
+    }
+
+    // Check for excessive subdomains
+    const subdomainCount = content.domain.split('.').length;
+    if (subdomainCount > 4) {
+      concerns.push('Excessive number of subdomains');
+      isThreat = true;
+    }
+
+    // Check for numeric domain
+    if (/^\d+\./.test(content.domain)) {
+      concerns.push('Numeric domain name');
+      isThreat = true;
+    }
+
+    // Check for URL length
+    if (content.originalUrl.length > 200) {
+      concerns.push('Unusually long URL');
+      isThreat = true;
+    }
   }
 
   return {
     source: 'local-heuristics',
     isThreat,
     threatType: concerns.length > 0 ? concerns.join(', ') : undefined,
-    confidence: 0.7,
+    confidence,
     details: concerns.length > 0
       ? `Local checks found ${concerns.length} concern(s)`
       : 'Local checks passed',
     timestamp: Date.now(),
   };
+}
+
+/**
+ * Detect typosquatting using pattern matching
+ * Looks for character substitutions in known brand names
+ */
+function detectTyposquatting(domain: string): boolean {
+  const lowerDomain = domain.toLowerCase();
+  
+  // Common typosquatting patterns
+  const suspiciousPatterns = [
+    /paypa[l1]/i,      // paypa1, paypaL
+    /g00gle/i,         // g00gle
+    /amaz0n/i,         // amaz0n
+    /micr0soft/i,      // micr0soft
+    /faceb00k/i,       // faceb00k
+    /twltter/i,        // twltter (l instead of i)
+    /instagra m/i,     // space in domain
+    /netfl1x/i,        // netfl1x
+    /apple-?id/i,      // apple-id
+    /goo-gle/i,        // hyphenated
+    /secure-?paypal/i, // securepaypal variants
+    /login-?microsoft/i, // loginmicrosoft
+    /verify-?amazon/i, // verifyamazon
+    /account-?google/i, // accountgoogle
+  ];
+  
+  for (const pattern of suspiciousPatterns) {
+    if (pattern.test(lowerDomain)) {
+      return true;
+    }
+  }
+  
+  // Check for repeated characters (e.g., gooogle, paypall)
+  if (/([a-z])\1{2,}/i.test(lowerDomain)) {
+    return true;
+  }
+  
+  return false;
+}
+
+/**
+ * Check for suspicious URL patterns
+ */
+function checkSuspiciousPatterns(url: string): string[] {
+  const flags: string[] = [];
+  const lowerUrl = url.toLowerCase();
+  
+  // Suspicious path patterns
+  const suspiciousPaths = [
+    /\/[^/]*(login|signin|verify|confirm|secure|account|update|password|credential|auth)[^/]*$/i,
+    /\/[^/]*(wp-admin|admin|panel|dashboard)[^/]*$/i,
+    /\/[^/]*(banking|payment|checkout|billing)[^/]*$/i,
+  ];
+  
+  for (const pattern of suspiciousPaths) {
+    if (pattern.test(lowerUrl)) {
+      flags.push('Suspicious path pattern detected');
+      break;
+    }
+  }
+  
+  // Check for multiple @ symbols (credential stuffing)
+  const atCount = (url.match(/@/g) || []).length;
+  if (atCount > 0) {
+    flags.push('URL contains @ symbol (credential stuffing risk)');
+  }
+  
+  // Check for data URI
+  if (lowerUrl.startsWith('data:')) {
+    flags.push('Data URI detected');
+  }
+  
+  return flags;
+}
+
+/**
+ * Detect if URL contains raw IP address
+ */
+function containsIPAddress(url: string): boolean {
+  const ipPattern = /\b\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}\b/;
+  return ipPattern.test(url);
+}
+
+/**
+ * Detect URL encoding abuse and obfuscation
+ */
+function detectEncodingAbuse(url: string): string[] {
+  const flags: string[] = [];
+  
+  // Count URL-encoded characters
+  const encodedCount = (url.match(/%[0-9a-fA-F]{2}/g) || []).length;
+  const totalLength = url.length;
+  
+  // If more than 15% of URL is encoded, flag it
+  if (encodedCount > 0 && (encodedCount * 3 / totalLength) > 0.15) {
+    flags.push('Heavy URL encoding (possible obfuscation)');
+  }
+  
+  // Check for suspicious encoding patterns
+  if (/%00/.test(url)) {
+    flags.push('Null byte encoding detected');
+  }
+  
+  // Check for double encoding
+  if (/%25[0-9a-fA-F]{2}/.test(url)) {
+    flags.push('Double URL encoding detected');
+  }
+  
+  return flags;
 }
 
 /**
@@ -223,8 +393,19 @@ function generateExplanations(checks: SafetyCheck[], score: number, qrData: QRDa
 /**
  * Generate actionable recommendations
  */
-function generateRecommendations(riskLevel: RiskLevel, checks: SafetyCheck[], qrData: QRData): string[] {
+function generateRecommendations(
+  riskLevel: RiskLevel, 
+  checks: SafetyCheck[], 
+  qrData: QRData,
+  isOffline: boolean
+): string[] {
   const recommendations: string[] = [];
+
+  // Add offline mode warning if applicable
+  if (isOffline) {
+    recommendations.push('⚠️ Limited check - offline mode (external security services unavailable)');
+    recommendations.push('Only local heuristics were performed. Use extra caution.');
+  }
 
   switch (riskLevel) {
     case RiskLevel.SAFE:

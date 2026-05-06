@@ -6,6 +6,7 @@
 import {
   QRType,
   QRData,
+  QRContent,
   URLContent,
   WiFiContent,
   ContactContent,

@@ -1,0 +1,28 @@
+{
+  "name": "amanqr-security-proxy",
+  "version": "1.0.0",
+  "description": "Cloudflare Worker proxy for AmanQR security checks with Google Safe Browsing and URLhaus",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "build": "tsc",
+    "lint": "eslint src --ext .ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "keywords": [
+    "qr-scanner",
+    "security",
+    "cloudflare-worker",
+    "safe-browsing",
+    "urlhaus"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240512.0",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0",
+    "wrangler": "^3.0.0"
+  }
+}

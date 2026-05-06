@@ -1,27 +1,18 @@
 /**
  * Application Configuration
- * API keys and configuration values (placeholders for POC)
+ * API keys and configuration values
  */
 
-// Azure OpenAI Configuration
-export const AZURE_OPENAI_CONFIG = {
-  endpoint: 'https://your-resource.openai.azure.com',
-  apiKey: 'your-azure-api-key',
-  deploymentName: 'your-deployment-name',
-  apiVersion: '2024-02-01',
-  timeout: 3000, // 3 seconds
-  maxRetries: 1,
+// Security Proxy Configuration (Cloudflare Worker)
+// This proxy combines Google Safe Browsing and URLhaus checks
+// API keys are kept secure on the server-side
+export const SECURITY_PROXY_CONFIG = {
+  endpoint: process.env.EXPO_PUBLIC_SECURITY_PROXY_ENDPOINT || '',
+  timeout: 5000, // 5 seconds
+  maxRetries: 2,
 };
 
-// Google Safe Browsing Configuration
-export const SAFE_BROWSING_CONFIG = {
-  apiKey: 'your-google-api-key',
-  endpoint: 'https://safebrowsing.googleapis.com/v4/threatMatches:find',
-  timeout: 3000,
-  maxRetries: 1,
-};
-
-// URLhaus Configuration (no API key required)
+// URLhaus Configuration (for reference - now handled by proxy)
 export const URLHAUS_CONFIG = {
   endpoint: 'https://urlhaus-api.abuse.ch/v1/url/',
   timeout: 3000,

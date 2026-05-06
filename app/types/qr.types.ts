@@ -220,7 +220,7 @@ export interface QRData {
  * Individual safety check result
  */
 export interface SafetyCheck {
-  source: 'azure-openai' | 'google-safe-browsing' | 'urlhaus' | 'local-heuristics';
+  source: 'google-safe-browsing' | 'urlhaus' | 'local-heuristics';
   isThreat: boolean;
   threatType?: string;
   confidence: number; // 0-100
@@ -255,17 +255,6 @@ export interface QRAnalysisResult {
 // ============================================
 // API Response Types
 // ============================================
-
-/**
- * Azure OpenAI Analysis Response
- */
-export interface AzureOpenAIResponse {
-  risk_level: 'low' | 'medium' | 'high' | 'critical';
-  confidence: number;
-  reasoning: string;
-  red_flags: string[];
-  recommendation: 'safe' | 'caution' | 'block';
-}
 
 /**
  * Google Safe Browsing API Response

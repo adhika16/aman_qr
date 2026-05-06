@@ -197,7 +197,7 @@ export default function QRScannerScreen() {
                   </View>
                   <View style={styles.checkItem}>
                     <MaterialIcons name="pending" size={16} color="#EAB308" />
-                    <Text style={styles.checkText}>AI safety analysis</Text>
+                    <Text style={styles.checkText}>Pattern analysis</Text>
                   </View>
                   <View style={styles.checkItem}>
                     <MaterialIcons name="pending" size={16} color="#EAB308" />

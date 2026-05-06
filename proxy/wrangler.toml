@@ -1,0 +1,37 @@
+# Cloudflare Worker Configuration for AmanQR Security Proxy
+
+name = "amanqr-security-proxy"
+main = "src/index.ts"
+compatibility_date = "2024-05-12"
+
+# Environment Variables
+[vars]
+RATE_LIMIT_REQUESTS = "30"
+RATE_LIMIT_WINDOW = "60"
+CACHE_TTL = "3600"
+
+# Secrets (set via wrangler secret put)
+# GOOGLE_SAFE_BROWSING_API_KEY - Your Google Safe Browsing API key
+
+# KV Namespace for Rate Limiting
+[[kv_namespaces]]
+binding = "AMANQR_RATE_LIMIT"
+id = "your_kv_namespace_id_here"
+preview_id = "your_preview_kv_namespace_id_here"
+
+# Build configuration
+[build]
+command = ""
+
+# Dev environment settings
+[env.dev]
+vars = { RATE_LIMIT_REQUESTS = "100", RATE_LIMIT_WINDOW = "60", CACHE_TTL = "3600" }
+
+# Production environment settings
+[env.production]
+vars = { RATE_LIMIT_REQUESTS = "30", RATE_LIMIT_WINDOW = "60", CACHE_TTL = "3600" }
+
+# Routes
+[[routes]]
+pattern = "security.amanqr.com/*"
+custom_domain = true

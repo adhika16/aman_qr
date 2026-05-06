@@ -18,6 +18,7 @@ import {
 import { router, useLocalSearchParams } from 'expo-router';
 import { MaterialIcons } from '@expo/vector-icons';
 
+import { OfflineModeBanner } from '@/components/offline-mode-banner';
 import {
   QRData,
   SafetyAnalysis,
@@ -41,6 +42,11 @@ export default function ResultScreen() {
 
   // Get risk level config
   const riskConfig = RISK_LEVEL_CONFIG[safetyAnalysis?.riskLevel || RiskLevel.SAFE];
+
+  // Check if we're in offline mode
+  const isOffline = safetyAnalysis?.checks?.some(
+    check => check.source !== 'local-heuristics' && check.confidence === 0
+  ) ?? false;
 
   const handleClose = () => {
     router.back();
@@ -174,6 +180,9 @@ export default function ResultScreen() {
           </View>
         </View>
 
+        {/* Offline Mode Banner */}
+        <OfflineModeBanner isOffline={isOffline} />
+
         {/* Content Preview */}
         {renderContentPreview()}
 
@@ -226,7 +235,15 @@ export default function ResultScreen() {
             {safetyAnalysis.checks.map((check, index) => (
               <View key={index} style={styles.checkItem}>
                 <View style={styles.checkHeader}>
-                  <Text style={styles.checkSource}>{check.source}</Text>
+                  <View style={styles.checkSourceContainer}>
+                    <Text style={styles.checkSource}>{check.source}</Text>
+                    {check.confidence === 0 && check.source !== 'local-heuristics' && (
+                      <View style={styles.offlineBadge}>
+                        <MaterialIcons name="cloud-off" size={10} color="#92400E" />
+                        <Text style={styles.offlineBadgeText}>Offline</Text>
+                      </View>
+                    )}
+                  </View>
                   <View
                     style={[
                       styles.checkBadge,
@@ -399,8 +416,8 @@ const styles = StyleSheet.create({
     padding: 16,
     backgroundColor: '#FFFBEB',
     borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#FCD34D',
+    borderLeftWidth: 4,
+    borderLeftColor: '#F59E0B',
   },
   paymentHeader: {
     flexDirection: 'row',
@@ -410,7 +427,7 @@ const styles = StyleSheet.create({
   },
   paymentTitle: {
     fontSize: 16,
-    fontWeight: '700',
+    fontWeight: '600',
     color: '#92400E',
   },
   paymentDetails: {
@@ -423,23 +440,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 8,
+    paddingVertical: 6,
     borderBottomWidth: 1,
-    borderBottomColor: '#FEF3C7',
+    borderBottomColor: '#F3F4F6',
   },
   paymentLabel: {
     fontSize: 14,
-    color: '#78716C',
-    fontWeight: '500',
+    color: '#6B7280',
   },
   paymentValue: {
     fontSize: 14,
-    color: '#1F2937',
     fontWeight: '600',
+    color: '#1F2937',
   },
   paymentAmount: {
-    fontSize: 18,
     color: '#059669',
+    fontSize: 16,
   },
   paymentWarning: {
     flexDirection: 'row',
@@ -450,19 +466,18 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   paymentWarningText: {
+    flex: 1,
     fontSize: 13,
     color: '#92400E',
-    fontWeight: '600',
-    flex: 1,
-    lineHeight: 18,
+    fontWeight: '500',
   },
   section: {
     margin: 16,
     marginTop: 0,
-    marginBottom: 12,
     padding: 16,
     backgroundColor: 'white',
     borderRadius: 12,
+    marginBottom: 12,
   },
   sectionTitle: {
     fontSize: 16,
@@ -474,11 +489,12 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#4B5563',
     lineHeight: 20,
+    marginBottom: 8,
   },
   detailRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    marginTop: 8,
+    marginBottom: 6,
   },
   detailIcon: {
     marginRight: 8,
@@ -487,37 +503,38 @@ const styles = StyleSheet.create({
   flagItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    backgroundColor: '#FEF2F2',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+    gap: 10,
   },
   flagText: {
+    flex: 1,
     fontSize: 14,
     color: '#DC2626',
-    marginLeft: 8,
-    flex: 1,
+    fontWeight: '500',
   },
   recommendationItem: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    marginBottom: 10,
   },
   recommendationIcon: {
-    marginRight: 8,
+    marginRight: 10,
     marginTop: 2,
   },
   recommendationText: {
+    flex: 1,
     fontSize: 14,
     color: '#4B5563',
-    flex: 1,
     lineHeight: 20,
   },
   checkItem: {
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
+    backgroundColor: '#F9FAFB',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
   },
   checkHeader: {
     flexDirection: 'row',
@@ -525,11 +542,30 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 4,
   },
+  checkSourceContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   checkSource: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#1F2937',
+    color: '#374151',
     textTransform: 'capitalize',
+  },
+  offlineBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#FEF3C7',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    gap: 2,
+  },
+  offlineBadgeText: {
+    fontSize: 10,
+    color: '#92400E',
+    fontWeight: '500',
   },
   checkBadge: {
     paddingHorizontal: 10,
@@ -537,12 +573,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   checkBadgeText: {
-    fontSize: 12,
     color: 'white',
+    fontSize: 12,
     fontWeight: '600',
   },
   checkDetails: {
-    fontSize: 12,
+    fontSize: 13,
     color: '#6B7280',
     marginTop: 4,
   },
@@ -550,26 +586,23 @@ const styles = StyleSheet.create({
     height: 100,
   },
   bottomBar: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
     flexDirection: 'row',
     justifyContent: 'space-around',
-    padding: 16,
-    paddingBottom: 32,
+    alignItems: 'center',
+    paddingVertical: 16,
+    paddingHorizontal: 20,
     backgroundColor: 'white',
     borderTopWidth: 1,
     borderTopColor: '#E5E7EB',
   },
   actionButton: {
     alignItems: 'center',
-    padding: 8,
-    minWidth: 80,
+    paddingHorizontal: 20,
   },
   actionButtonText: {
+    marginTop: 4,
     fontSize: 12,
     color: '#3B82F6',
-    marginTop: 4,
+    fontWeight: '500',
   },
 });
