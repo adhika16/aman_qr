@@ -1,0 +1,21 @@
+{
+	"name": "amanqr-security-proxy",
+	"main": "src/index.js",
+	"compatibility_date": "2026-05-11",
+	"observability": {
+		"enabled": true
+	},
+	"vars": {
+		"RATE_LIMIT_REQUESTS": "30",
+		"RATE_LIMIT_WINDOW": "60",
+		"CACHE_TTL": "3600",
+		"CORS_ORIGIN": "*"
+	},
+	"kv_namespaces": [
+		{
+			"binding": "AMANQR_RATE_LIMIT",
+			"id": "your_kv_namespace_id_here",
+			"preview_id": "your_preview_kv_namespace_id_here"
+		}
+	]
+}
